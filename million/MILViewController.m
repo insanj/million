@@ -12,7 +12,9 @@
 #define ONE_MILLION 1000000.0
 #define GEN_DELAY 0.0
 
-static const NSInteger kMILPixelsPerStar = 3;
+static const NSInteger kMILPixelsPerStar = 1;
+static const NSInteger kMILCallsPerCycle = 1000;
+static const NSInteger kMILStarsPerCycle = kMILCallsPerCycle; // estimated from CADisplayLink averages. obviously not entirely legitamate.
 
 typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	MILViewControllerIntroducingState = 1 << 0,
@@ -57,7 +59,7 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	self = [super init];
 	
 	if (self) {
-		_displayBounds = [UIScreen mainScreen].nativeBounds;
+		_displayBounds = [UIScreen mainScreen].bounds; // nativeBounds is only supported on iOS 8
 	}
 	
 	return self;
@@ -79,11 +81,11 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 
 - (void)loadIntroduction:(UIActivityIndicatorView *)indicatorView {
 	while (_uniqueColors.count < ONE_MILLION) {
-		CGFloat hue = (arc4random() % 256 / 256.0);
-		CGFloat saturation = (arc4random() % 128 / 256.0) + 0.5;
-		CGFloat brightness = (arc4random() % 128 / 256.0) + 0.5;
+		CGFloat randomHue = arc4random_uniform(256) / 256.0;
+		CGFloat randomSaturation = (arc4random_uniform(128) / 256.0) + 0.5;
+		CGFloat randomBrightness = (arc4random_uniform(128) / 256.0) + 0.5;
 		
-		UIColor *hopefullyUniqueColor = [UIColor colorWithHue:hue saturation:saturation brightness:brightness alpha:1];
+		UIColor *hopefullyUniqueColor = [UIColor colorWithHue:randomHue saturation:randomSaturation brightness:randomBrightness alpha:1.0];
 		[_uniqueColors addObject:hopefullyUniqueColor];
 	}
 	
@@ -157,8 +159,12 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	_possibleStarsForDisplay = floorf(numberOfPixels / kMILPixelsPerStar);
 	NSInteger rateOfAppearance = ceilf(ONE_MILLION / _possibleStarsForDisplay);
 	
+	NSString *introductionLabelText = [NSString stringWithFormat:@"every second millions of things are whirring around you. a million atoms pulse through your breath, a million wavelengths of color permeate your retinas, a million things pile up ahead of you. tap to see a million in lights. tap and hold to start over.\n\nthis display has %@ pixels. to show a million %lu-pixel stars, %lu cycles would have to occur. for now, estimated time is %@ minutes.", [NSNumberFormatter localizedStringFromNumber:@(numberOfPixels) numberStyle:NSNumberFormatterDecimalStyle], (unsigned long)kMILPixelsPerStar, (unsigned long)rateOfAppearance, [NSNumberFormatter localizedStringFromNumber:@(ONE_MILLION / kMILStarsPerCycle /* * 60.0 * 60.0)*/ ) numberStyle:NSNumberFormatterDecimalStyle]];
+	UIFont *introductionDescriptionFont = [UIFont fontWithName:@"AvenirNext-UltraLight" size:20.0];
+
 	CGRect introductionHeaderLabelFrame = CGRectMake(0.0, 0.0, self.view.frame.size.width, 50.0);
-	CGRect introductionDescriptionLabelFrame = CGRectMake(20.0, introductionHeaderLabelFrame.size.height, self.view.frame.size.width - 40.0, 400.0);
+	CGRect introductionDescriptionLabelFrame = CGRectMake(20.0, introductionHeaderLabelFrame.size.height, self.view.frame.size.width - 40.0, 0.0); // self.view.frame.size.height - introductionHeaderLabelFrame.size.height);
+	introductionDescriptionLabelFrame.size.height = [introductionLabelText boundingRectWithSize:CGSizeMake(introductionDescriptionLabelFrame.size.width, self.view.frame.size.height - introductionHeaderLabelFrame.size.height) options:NSStringDrawingUsesLineFragmentOrigin attributes:@{ NSFontAttributeName : introductionDescriptionFont } context:nil].size.height;
 	
 	CGFloat initialOffsetAmount = 10.0;
 	
@@ -186,10 +192,10 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 		
 		_introductionDescriptionLabel = [[UILabel alloc] initWithFrame:introductionInitialDescriptionLabelFrame];
 		_introductionDescriptionLabel.backgroundColor = [UIColor clearColor];
-		_introductionDescriptionLabel.font = [UIFont fontWithName:@"AvenirNext-UltraLight" size:20.0];
+		_introductionDescriptionLabel.font = introductionDescriptionFont;
 		_introductionDescriptionLabel.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
-		_introductionDescriptionLabel.text = [NSString stringWithFormat:@"every second millions of things are whirring around you. a million atoms pulse through your breath, a million wavelengths of color permeate your retinas, a million things pile up ahead of you. tap to see a million in lights. tap and hold to start over.\n\nthis display has %@ pixels. to show a million %lu-pixel stars, %lu cycles would have to occur.", [NSNumberFormatter localizedStringFromNumber:@(numberOfPixels) numberStyle:NSNumberFormatterDecimalStyle], (unsigned long)kMILPixelsPerStar, (unsigned long)rateOfAppearance];
- 		_introductionDescriptionLabel.textAlignment = NSTextAlignmentCenter;
+		_introductionDescriptionLabel.text = introductionLabelText;
+		_introductionDescriptionLabel.textAlignment = NSTextAlignmentCenter;
 		_introductionDescriptionLabel.alpha = 0.0;
 		_introductionDescriptionLabel.numberOfLines = 0;
 		_introductionDescriptionLabel.lineBreakMode = NSLineBreakByWordWrapping;
@@ -313,13 +319,13 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 
 - (void)immediatelyGenerateStar {
 	NSInteger starCountInteger = _starCount.integerValue;
-	_starCount = @(starCountInteger - 1);
-	
-	_starCountLabel.text = [NSNumberFormatter localizedStringFromNumber:_starCount numberStyle:NSNumberFormatterDecimalStyle];
-	[_starCountLabel sizeToFit];
+	_starCount = @(starCountInteger - kMILCallsPerCycle);
 	
 	if (starCountInteger > 1) {
-		[self generateStarWithColor:[_uniqueColors objectAtIndex:arc4random_uniform(_uniqueColors.count)]];
+		for (int i = 0, mischievouslyRandomNumber = arc4random_uniform(_uniqueColors.count); i < kMILCallsPerCycle; i++, mischievouslyRandomNumber++) {
+			[self generateStarWithColor:[_uniqueColors objectAtIndex:arc4random_uniform(_uniqueColors.count)]];
+		}
+
 		// [self performSelectorInBackground:@selector(repeatedlyGenerateStar) withObject:nil];
 	}
 	
@@ -327,6 +333,9 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 		_starDisplayLink.paused = YES;
 		[self repeatedlyGenerateStar];
 	}
+	
+	_starCountLabel.text = [NSNumberFormatter localizedStringFromNumber:_starCount numberStyle:NSNumberFormatterDecimalStyle];
+	[_starCountLabel sizeToFit];
 }
 
 - (void)generateStarWithColor:(UIColor *)color {
