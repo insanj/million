@@ -396,6 +396,7 @@
 				9EA99A8319B8DA5E002314FA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		9EA99A8419B8DA5E002314FA /* Build configuration list for PBXNativeTarget "millionTests" */ = {
 			isa = XCConfigurationList;
@@ -404,6 +405,7 @@
 				9EA99A8619B8DA5E002314FA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

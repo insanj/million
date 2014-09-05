@@ -10,11 +10,10 @@
 #import <QuartzCore/QuartzCore.h>
 
 #define ONE_MILLION 1000000.0
-#define GEN_DELAY 0.0
 
-static const NSInteger kMILPixelsPerStar = 1;
-static const NSInteger kMILCallsPerCycle = 1000;
-static const NSInteger kMILStarsPerCycle = kMILCallsPerCycle; // estimated from CADisplayLink averages. obviously not entirely legitamate.
+static const NSInteger kMILPixelsPerStar = 30;  // average size for sustained calls (shown below). the simulator looks good with about 16 pixels per star.
+static const NSInteger kMILCallsPerCycle = 111; // amount of stars that can be feasibly generated in 1 sec, according to iPhone 5s capabilities. however, the
+												// iPhone 5 (8.0) simulator can run up to around 255 calls per cycle without hinderance (as seen in screenies)
 
 typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	MILViewControllerIntroducingState = 1 << 0,
@@ -24,6 +23,8 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 };
 
 @interface MILViewController ()
+
+@property (strong, nonatomic, readonly) NSMutableArray *uniqueColors;
 
 @property (nonatomic, readwrite) MILViewControllerState millionState;
 
@@ -37,38 +38,27 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 
 @property (strong, nonatomic) UILongPressGestureRecognizer *stopGestureRecognizer;
 
-@property (nonatomic, readonly) CGRect displayBounds;
-
 @property (nonatomic, readwrite) NSInteger possibleStarsForDisplay;
 
-@property (strong, nonatomic, readonly) NSMutableArray *uniqueColors;
+@property (strong, nonatomic, readwrite) NSNumber *pixelsUnoccupiedCount;
 
-@property (strong, nonatomic, readwrite) NSNumber *starCount;
-
-@property (strong, nonatomic) UILabel *starCountLabel;
-
-// @property (nonatomic, readwrite) NSTimeInterval starDisplayRate;
+@property (strong, nonatomic) UILabel *pixelsUnoccupiedCountLabel;
 
 @property (strong, nonatomic, readwrite) CADisplayLink *starDisplayLink;
+
+@property (strong, nonatomic, readonly) UIImageView *starImageView;
 
 @end
 
 @implementation MILViewController
 
-- (instancetype)init {
-	self = [super init];
-	
-	if (self) {
-		_displayBounds = [UIScreen mainScreen].bounds; // nativeBounds is only supported on iOS 8
-	}
-	
-	return self;
-}
-
 - (void)viewDidLoad {
 	[super viewDidLoad];
 	
 	self.view.backgroundColor = [UIColor clearColor];
+	
+	_starImageView = [[UIImageView alloc] initWithFrame:self.view.frame];
+	[self.view addSubview:_starImageView];
 	
 	UIActivityIndicatorView *introductionLoadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
 	introductionLoadingIndicator.center = self.view.center;
@@ -84,8 +74,9 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 		CGFloat randomHue = arc4random_uniform(256) / 256.0;
 		CGFloat randomSaturation = (arc4random_uniform(128) / 256.0) + 0.5;
 		CGFloat randomBrightness = (arc4random_uniform(128) / 256.0) + 0.5;
+		CGFloat randomAlpha = (arc4random_uniform(100) + 1) / 100.0;
 		
-		UIColor *hopefullyUniqueColor = [UIColor colorWithHue:randomHue saturation:randomSaturation brightness:randomBrightness alpha:1.0];
+		UIColor *hopefullyUniqueColor = [UIColor colorWithHue:randomHue saturation:randomSaturation brightness:randomBrightness alpha:randomAlpha];
 		[_uniqueColors addObject:hopefullyUniqueColor];
 	}
 	
@@ -155,12 +146,14 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 #pragma mark - presentation
 
 - (void)presentIntroduction {
-	NSInteger numberOfPixels = _displayBounds.size.width * _displayBounds.size.height;
-	_possibleStarsForDisplay = floorf(numberOfPixels / kMILPixelsPerStar);
-	NSInteger rateOfAppearance = ceilf(ONE_MILLION / _possibleStarsForDisplay);
+	CGRect displayBounds = [UIScreen mainScreen].bounds; // nativeBounds is only supported on iOS 8
+	CGFloat displayScale = [UIScreen mainScreen].scale;
 	
-	NSString *introductionLabelText = [NSString stringWithFormat:@"every second millions of things are whirring around you. a million atoms pulse through your breath, a million wavelengths of color permeate your retinas, a million things pile up ahead of you. tap to see a million in lights. tap and hold to start over.\n\nthis display has %@ pixels. to show a million %lu-pixel stars, %lu cycles would have to occur. for now, estimated time is %@ minutes.", [NSNumberFormatter localizedStringFromNumber:@(numberOfPixels) numberStyle:NSNumberFormatterDecimalStyle], (unsigned long)kMILPixelsPerStar, (unsigned long)rateOfAppearance, [NSNumberFormatter localizedStringFromNumber:@(ONE_MILLION / kMILStarsPerCycle /* * 60.0 * 60.0)*/ ) numberStyle:NSNumberFormatterDecimalStyle]];
-	UIFont *introductionDescriptionFont = [UIFont fontWithName:@"AvenirNext-UltraLight" size:20.0];
+	NSInteger numberOfPixels = (displayBounds.size.width * displayScale) * (displayBounds.size.height * displayScale);
+	_possibleStarsForDisplay = numberOfPixels / kMILPixelsPerStar;
+	
+	NSString *introductionLabelText = [NSString stringWithFormat:@"every second millions of things are whirring around you. a million atoms pulse through your breath, a million wavelengths of color permeate your retinas, a million things pile up ahead of you. tap to see a million in lights. tap and hold to start over.\n\nthis display has %@ pixels, which means, to light several layers of %@-pixel stars, it will take about %@ minutes.", [NSNumberFormatter localizedStringFromNumber:@(numberOfPixels) numberStyle:NSNumberFormatterDecimalStyle], /* [NSNumberFormatter localizedStringFromNumber:@(_possibleStarsForDisplay) numberStyle:NSNumberFormatterDecimalStyle], */ [NSNumberFormatter localizedStringFromNumber:@(kMILPixelsPerStar) numberStyle:NSNumberFormatterSpellOutStyle], [NSNumberFormatter localizedStringFromNumber:@(((ONE_MILLION / kMILPixelsPerStar) / kMILCallsPerCycle) / 60.0) numberStyle:NSNumberFormatterDecimalStyle]];
+	UIFont *introductionDescriptionFont = [UIFont fontWithName:@"Avenir-Light" size:17.0];
 
 	CGRect introductionHeaderLabelFrame = CGRectMake(0.0, 0.0, self.view.frame.size.width, 50.0);
 	CGRect introductionDescriptionLabelFrame = CGRectMake(20.0, introductionHeaderLabelFrame.size.height, self.view.frame.size.width - 40.0, 0.0); // self.view.frame.size.height - introductionHeaderLabelFrame.size.height);
@@ -193,7 +186,7 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 		_introductionDescriptionLabel = [[UILabel alloc] initWithFrame:introductionInitialDescriptionLabelFrame];
 		_introductionDescriptionLabel.backgroundColor = [UIColor clearColor];
 		_introductionDescriptionLabel.font = introductionDescriptionFont;
-		_introductionDescriptionLabel.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
+		_introductionDescriptionLabel.textColor = [UIColor colorWithWhite:0.58 alpha:1.0];
 		_introductionDescriptionLabel.text = introductionLabelText;
 		_introductionDescriptionLabel.textAlignment = NSTextAlignmentCenter;
 		_introductionDescriptionLabel.alpha = 0.0;
@@ -252,97 +245,86 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	_millionState = MILViewControllerPlayingState;
 
 	if (!starsArePaused) {
-		if (_starCountLabel) {
-			_starCountLabel.text = @"";
+		_starImageView.image = [UIImage new];
+		
+		if (!_pixelsUnoccupiedCountLabel) {
+			_pixelsUnoccupiedCountLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+			_pixelsUnoccupiedCountLabel.layer.cornerRadius = 4.0;
+			_pixelsUnoccupiedCountLabel.textAlignment = NSTextAlignmentLeft;
+			_pixelsUnoccupiedCountLabel.numberOfLines = 0;
+			_pixelsUnoccupiedCountLabel.font = [UIFont fontWithName:@"AvenirNext" size:12.0];
+			_pixelsUnoccupiedCountLabel.minimumScaleFactor = 0.9;
+			_pixelsUnoccupiedCountLabel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.3];
+			_pixelsUnoccupiedCountLabel.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
+			[self.view addSubview:_pixelsUnoccupiedCountLabel];
 		}
 		
-		else {
-			CGRect starCountLabel = self.view.frame;
-			starCountLabel.origin.x += 10.0;
-			starCountLabel.size.width -= 20.0;
-			starCountLabel.origin.y += 10.0;
-			starCountLabel.size.height -= 20.0;
-			
-			_starCountLabel = [[UILabel alloc] initWithFrame:starCountLabel];
-			_starCountLabel.layer.cornerRadius = 4.0;
-			_starCountLabel.textAlignment = NSTextAlignmentLeft;
-			_starCountLabel.numberOfLines = 0;
-			_starCountLabel.font = [UIFont fontWithName:@"AvenirNext" size:12.0];
-			_starCountLabel.minimumScaleFactor = 0.9;
-			_starCountLabel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.3];
-			_starCountLabel.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
-			[self.view.superview addSubview:_starCountLabel];
-		}
+		_pixelsUnoccupiedCount = @(ONE_MILLION);
+
+		_pixelsUnoccupiedCountLabel.text = [NSNumberFormatter localizedStringFromNumber:_pixelsUnoccupiedCount numberStyle:NSNumberFormatterDecimalStyle];
+		_pixelsUnoccupiedCountLabel.frame = UIEdgeInsetsInsetRect(self.view.frame, UIEdgeInsetsMake(10.0, 10.0, 10.0, 10.0));
+		_pixelsUnoccupiedCountLabel.alpha = 0.0;
 		
-		_starCountLabel.alpha = 0.0;
-		_starCount = @(ONE_MILLION);
+		[_pixelsUnoccupiedCountLabel sizeToFit];
 		
 		[UIView animateWithDuration:0.2 animations:^(void){
-			_starCountLabel.alpha = 1.0;
+			_pixelsUnoccupiedCountLabel.alpha = 1.0;
+			_starImageView.alpha = 1.0;
 		}];
 	}
-	
-	// CADisplayLink *phonyDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:nil];
-	// _starDisplayRate = phonyDisplayLink.duration * phonyDisplayLink.frameInterval;
-	// 	[self repeatedlyGenerateStar];
 
 	// Start up the clock...
 	_starDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(immediatelyGenerateStar)];
 	[_starDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
-
-	// [self repeatedlyGenerateStar:@(ONE_MILLION)];
 }
 
 #pragma mark - generation
 
-- (void)repeatedlyGenerateStar {
-	NSInteger starCountInteger = _starCount.integerValue;
-	_starCount = @(starCountInteger - 1);
-	
-	_starCountLabel.text = [NSNumberFormatter localizedStringFromNumber:_starCount numberStyle:NSNumberFormatterDecimalStyle];
-	[_starCountLabel sizeToFit];
-	
-	if (starCountInteger > 0) {
-		[self generateStarWithColor:[_uniqueColors objectAtIndex:arc4random_uniform(_uniqueColors.count)]];
-		[self performSelector:@selector(repeatedlyGenerateStar) withObject:nil afterDelay:GEN_DELAY];
-		// [self performSelectorInBackground:@selector(repeatedlyGenerateStar) withObject:nil];
-	}
-	
-	else {
-		[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(repeatedlyGenerateStar) object:nil];
-		
-		[UIView animateWithDuration:0.2 animations:^(void) {
-			_starCountLabel.alpha = 0.0;
-		}];
-	}
-}
-
 - (void)immediatelyGenerateStar {
-	NSInteger starCountInteger = _starCount.integerValue;
-	_starCount = @(starCountInteger - kMILCallsPerCycle);
+	NSInteger pixelsUnoccupiedCountInteger = _pixelsUnoccupiedCount.integerValue;
 	
-	if (starCountInteger > 1) {
-		for (int i = 0, mischievouslyRandomNumber = arc4random_uniform(_uniqueColors.count); i < kMILCallsPerCycle; i++, mischievouslyRandomNumber++) {
-			[self generateStarWithColor:[_uniqueColors objectAtIndex:arc4random_uniform(_uniqueColors.count)]];
+	if (pixelsUnoccupiedCountInteger > 0) {
+		for (NSInteger i = 0, mischievouslyRandomNumber = arc4random_uniform((int)_uniqueColors.count); i < kMILCallsPerCycle; i++, mischievouslyRandomNumber++) {
+			[self generateStarWithColor:[_uniqueColors objectAtIndex:arc4random_uniform((int)_uniqueColors.count)]];
 		}
-
-		// [self performSelectorInBackground:@selector(repeatedlyGenerateStar) withObject:nil];
 	}
 	
 	else {
 		_starDisplayLink.paused = YES;
-		[self repeatedlyGenerateStar];
+		
+		[UIView animateWithDuration:0.2 animations:^(void) {
+			_pixelsUnoccupiedCountLabel.alpha = 0.0;
+		}];
 	}
 	
-	_starCountLabel.text = [NSNumberFormatter localizedStringFromNumber:_starCount numberStyle:NSNumberFormatterDecimalStyle];
-	[_starCountLabel sizeToFit];
+	NSInteger pixelsUnoccupiedAfterGeneration = pixelsUnoccupiedCountInteger - (kMILCallsPerCycle * kMILPixelsPerStar);
+
+	_pixelsUnoccupiedCount = @(pixelsUnoccupiedAfterGeneration);
+	_pixelsUnoccupiedCountLabel.text = [NSNumberFormatter localizedStringFromNumber:_pixelsUnoccupiedCount numberStyle:NSNumberFormatterDecimalStyle];
+	[_pixelsUnoccupiedCountLabel sizeToFit];
 }
 
 - (void)generateStarWithColor:(UIColor *)color {
-	CALayer *starLayer = [CALayer layer];
+	CGRect starImageDrawRect = _starImageView.frame;
+	UIGraphicsBeginImageContextWithOptions(starImageDrawRect.size, NO, [UIScreen mainScreen].scale);
+	CGContextRef starContext = UIGraphicsGetCurrentContext();
+	
+	[_starImageView.image drawInRect:starImageDrawRect];
+
+	CGContextSetFillColorWithColor(starContext, color.CGColor);
+	CGContextFillEllipseInRect(starContext, CGRectMake(arc4random_uniform(starImageDrawRect.size.width - kMILPixelsPerStar), arc4random_uniform(starImageDrawRect.size.height - kMILPixelsPerStar), kMILPixelsPerStar, kMILPixelsPerStar));
+
+	UIImage *starCompositeImage = UIGraphicsGetImageFromCurrentImageContext();
+	UIGraphicsEndImageContext();
+	
+	[UIView transitionWithView:_starImageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+		_starImageView.image = starCompositeImage;
+	} completion:nil];
+	
+/*	CALayer *starLayer = [CALayer layer];
 	starLayer.frame = CGRectMake(arc4random_uniform(_displayBounds.size.width - 1.0), arc4random_uniform(_displayBounds.size.height - 1.0), kMILPixelsPerStar, kMILPixelsPerStar);
 	starLayer.backgroundColor = color.CGColor;
-	[self.view.layer addSublayer:starLayer];
+	[self.view.layer addSublayer:starLayer]; */
 }
 
 #pragma mark - control
@@ -351,7 +333,6 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	_millionState = MILViewControllerPausedState;
 	
 	_starDisplayLink.paused = YES;
-	// [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(repeatedlyGenerateStar) object:nil];
 }
 
 #pragma mark - end
@@ -360,13 +341,12 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	_millionState = MILViewControllerStoppedState;
 	
 	_starDisplayLink.paused = YES;
-	// [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(repeatedlyGenerateStar) object:nil];
 	
 	CGSize starSize = CGSizeMake(kMILPixelsPerStar, kMILPixelsPerStar);
-	for (int i = self.view.layer.sublayers.count - 1; i >= 0; i--) {
+	for (int i = (int)self.view.layer.sublayers.count - 1; i >= 0; i--) {
 		CALayer *sublayer = self.view.layer.sublayers[i];
 		if (CGSizeEqualToSize(sublayer.frame.size, starSize)) {
-			[UIView animateWithDuration:0.1 delay:0.0 options:UIViewAnimationOptionCurveEaseOut animations:^(void) {
+			[UIView animateWithDuration:0.2 delay:0.0 options:UIViewAnimationOptionCurveEaseOut animations:^(void) {
 				sublayer.opacity = 0.0;
 			} completion:^(BOOL finished) {
 				[sublayer removeFromSuperlayer];
@@ -374,7 +354,11 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 		}
 	}
 	
-	_starCountLabel.alpha = 0.0;
+	[UIView animateWithDuration:0.2 animations:^(void) {
+		_pixelsUnoccupiedCountLabel.alpha = 0.0;
+		_starImageView.alpha = 0.15;
+	}];
+
 	[self presentIntroduction];
 }
 
