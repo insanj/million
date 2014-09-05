@@ -19,7 +19,7 @@
             
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-	self.window.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
+	self.window.backgroundColor = [UIColor colorWithWhite:0.13 alpha:1.0];
 	
 	_millionViewController = [[MILViewController alloc] init];
 	self.window.rootViewController = _millionViewController;
