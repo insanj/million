@@ -14,7 +14,6 @@
 static const NSInteger kMILPixelsPerStar = 30;  // average size for sustained calls (shown below). the simulator looks good with about 16 pixels per star.
 static const NSInteger kMILCallsPerCycle = 111; // amount of stars that can be feasibly generated in 1 sec, according to iPhone 5s capabilities. however, the
 												// iPhone 5 (8.0) simulator can run up to around 255 calls per cycle without hinderance (as seen in screenies)
-
 typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	MILViewControllerIntroducingState = 1 << 0,
 	MILViewControllerPlayingState = 1 << 1,
@@ -312,7 +311,9 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	[_starImageView.image drawInRect:starImageDrawRect];
 
 	CGContextSetFillColorWithColor(starContext, color.CGColor);
-	CGContextFillEllipseInRect(starContext, CGRectMake(arc4random_uniform(starImageDrawRect.size.width - kMILPixelsPerStar), arc4random_uniform(starImageDrawRect.size.height - kMILPixelsPerStar), kMILPixelsPerStar, kMILPixelsPerStar));
+	
+	CGFloat starDiameterFromArea = sqrtf(kMILPixelsPerStar / M_PI) * 2.0;
+	CGContextFillEllipseInRect(starContext, CGRectMake(arc4random_uniform(starImageDrawRect.size.width - starDiameterFromArea), arc4random_uniform(starImageDrawRect.size.height - starDiameterFromArea), starDiameterFromArea, starDiameterFromArea));
 
 	UIImage *starCompositeImage = UIGraphicsGetImageFromCurrentImageContext();
 	UIGraphicsEndImageContext();
@@ -320,11 +321,6 @@ typedef NS_ENUM(NSUInteger, MILViewControllerState) {
 	[UIView transitionWithView:_starImageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
 		_starImageView.image = starCompositeImage;
 	} completion:nil];
-	
-/*	CALayer *starLayer = [CALayer layer];
-	starLayer.frame = CGRectMake(arc4random_uniform(_displayBounds.size.width - 1.0), arc4random_uniform(_displayBounds.size.height - 1.0), kMILPixelsPerStar, kMILPixelsPerStar);
-	starLayer.backgroundColor = color.CGColor;
-	[self.view.layer addSublayer:starLayer]; */
 }
 
 #pragma mark - control
